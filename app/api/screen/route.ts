@@ -12,6 +12,8 @@ export async function POST(req: Request) {
     formula?: string;
     film?: string;
     coReactant?: string;
+    temp?: number;
+    forbidden?: string[];
     candidates?: CandidateInput[];
     useMl?: boolean;
   };
@@ -27,7 +29,8 @@ export async function POST(req: Request) {
       const response = await screenPrecursors({
         film: body.film,
         co_reactant: body.coReactant,
-        temperature_max_c: 350,
+        temperature_max_c: body.temp ?? 350,
+        forbidden_elements: body.forbidden,
         candidates: body.candidates,
         use_ml_potential: body.useMl ?? false,
       });

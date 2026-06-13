@@ -1,6 +1,6 @@
 import { screenPrecursors } from "@/lib/engine/client";
 import { cachedScreen } from "@/lib/engine/cache";
-import { SCENARIOS } from "@/lib/data/scenarios";
+import { SCENARIOS, parseCandidates } from "@/lib/data/scenarios";
 import { ScreeningConsole } from "@/components/screens/ScreeningConsole";
 import type { ScreenResponse } from "@/lib/engine/types";
 
@@ -14,8 +14,8 @@ export default async function IntakePage() {
     initial = await screenPrecursors({
       film: s.film,
       co_reactant: s.coReactant,
-      temperature_max_c: 350,
-      candidates: s.candidates,
+      temperature_max_c: s.temp,
+      candidates: parseCandidates(s.candsText),
       use_ml_potential: false,
     });
   } catch {
