@@ -2,8 +2,14 @@
 
 import * as THREE from "three";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { SURFACE_SYSTEMS } from "@/lib/data/surface";
+import type { ScorecardCandidate } from "@/lib/engine/types";
+
+// pull a component score (0..1) off a live scorecard as a percent string
+function comp(card: ScorecardCandidate, name: string) {
+  const c = card.components.find((x) => x.name === name);
+  return c ? `${Math.round(c.score * 100)}%` : "—";
+}
 
 const smooth = (x: number, a: number, b: number) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -33,11 +39,13 @@ interface Engine {
 }
 
 export function SurfaceChemistry() {
-  const router = useRouter();
   const [mat, setMat] = useState(1);
   const [playing, setPlaying] = useState(false);
   const [escalated, setEscalated] = useState(false);
   const [tauPct, setTauPct] = useState(0);
+  const [card, setCard] = useState<ScorecardCandidate | null>(null);
+  const [cardState, setCardState] = useState<"loading" | "live" | "none">("loading");
+  const [backendLabel, setBackendLabel] = useState("engine");
 
   const glHost = useRef<HTMLDivElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -64,6 +72,34 @@ export function SurfaceChemistry() {
       e.alMesh.scale.setScalar(s.mr);
     }
   }, [mat]);
+
+  // pull a LIVE precursor scorecard from the densitygen engine for this film
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/screen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ formula: m.prodF, useMl: true }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        const top = d?.response?.ranked_candidates?.[0];
+        if (d?.supported && top) {
+          setCard(top);
+          setBackendLabel(d.response.model_provenance?.compute_backend ?? "engine");
+          setCardState("live");
+        } else {
+          setCardState("none");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCardState("none");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mat, m.prodF]);
 
   // mount Three.js scene once
   useEffect(() => {
@@ -443,20 +479,45 @@ export function SurfaceChemistry() {
             </div>
           </div>
 
-          {/* numbers + energy */}
+          {/* numbers + energy — LIVE viability from the densitygen engine */}
           <div className="flex flex-col p-4">
-            <div className="mono text-[10px] uppercase tracking-[0.1em] text-faint">Predicted · {m.prodF}</div>
-            <div className="mt-2 flex items-baseline gap-[7px]">
-              <span className="serif text-[52px] leading-[0.9] text-ink">{m.Ea.toFixed(2)}</span>
-              <span className="mono text-[14px] text-faint">eV</span>
+            <div className="mono text-[10px] uppercase tracking-[0.1em] text-faint">
+              {cardState === "live" && card ? `${card.name} → ${m.prodF}` : `Precursor · ${m.prodF}`}
             </div>
-            <div className="mono mt-0.5 text-[10.5px] tracking-[0.04em] text-amber-deep">ACTIVATION BARRIER Eₐ</div>
+            <div className="mt-2 flex items-baseline gap-[7px]">
+              <span className="serif text-[52px] leading-[0.9] text-ink">
+                {cardState === "live" && card ? Math.round(card.overall_score * 100) : m.Ea.toFixed(2)}
+              </span>
+              <span className="mono text-[14px] text-faint">{cardState === "live" && card ? "/100" : "eV"}</span>
+            </div>
+            <div className="mono mt-0.5 flex items-center gap-1.5 text-[10.5px] tracking-[0.04em] text-amber-deep">
+              {cardState === "live" && card ? (
+                <>
+                  <span className="dot-blink" /> ALD VIABILITY · {backendLabel}
+                </>
+              ) : cardState === "loading" ? (
+                "screening…"
+              ) : (
+                "ACTIVATION BARRIER Eₐ · illustrative"
+              )}
+            </div>
 
             <div className="mt-3.5 grid grid-cols-2 gap-px overflow-hidden rounded-[2px] border border-hair bg-hair">
-              <Stat v={m.dE.toFixed(1)} l="ΔE_rxn eV" />
-              <Stat v={m.kappa} l="dielectric κ" />
-              <Stat v={m.eg} l="band gap eV" />
-              <Stat v={m.temp} l="window °C" />
+              {cardState === "live" && card ? (
+                <>
+                  <Stat v={comp(card, "surface_reactivity")} l="surface react." />
+                  <Stat v={comp(card, "self_limiting")} l="self-limiting" />
+                  <Stat v={comp(card, "clean_ligand")} l="clean ligand" />
+                  <Stat v={comp(card, "thermal_window")} l="thermal win." />
+                </>
+              ) : (
+                <>
+                  <Stat v={m.dE.toFixed(1)} l="ΔE_rxn eV" />
+                  <Stat v={m.kappa} l="dielectric κ" />
+                  <Stat v={m.eg} l="band gap eV" />
+                  <Stat v={m.temp} l="window °C" />
+                </>
+              )}
             </div>
 
             <div className="mt-3.5 rounded-[2px] border border-hair bg-surface px-1 pb-0.5 pt-1.5">
@@ -484,20 +545,26 @@ export function SurfaceChemistry() {
             </div>
 
             <div className="mono mt-2.5 text-[9.5px] leading-relaxed text-faint">
-              UMA · OMat24-trained MLIP — <span className="text-amber-deep">predicted ±0.08 eV</span>, not DFT-confirmed
+              {cardState === "live" && card ? (
+                <>
+                  densitygen engine · {backendLabel}
+                  {card.ml_energy_ev != null ? ` · MLIP E ${card.ml_energy_ev.toFixed(2)} eV` : " · descriptor scoring"} —{" "}
+                  <span className="text-amber-deep">live</span>
+                </>
+              ) : (
+                <>
+                  3D trajectory is an <span className="text-amber-deep">illustration</span>; viability numbers load from
+                  the densitygen engine
+                </>
+              )}
             </div>
             <button
               onClick={() => setEscalated(true)}
               className="btn-primary mt-2.5 w-full"
               disabled={escalated}
             >
-              {escalated ? "✓ Queued — r²SCAN + NEB" : "Confirm with DFT →"}
+              {escalated ? "✓ Queued — UMA NEB + DFT" : "Confirm with DFT →"}
             </button>
-            {escalated && (
-              <button onClick={() => router.push("/compute")} className="mono mt-1.5 text-[11px] text-amber-deep underline">
-                view in compute dispatch →
-              </button>
-            )}
           </div>
         </div>
 

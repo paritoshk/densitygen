@@ -31,8 +31,8 @@ export default async function CandidatesPage() {
             <Link href="/trade-offs" className="btn-ghost">
               View trade-offs ↗
             </Link>
-            <Link href="/compute" className="btn-primary">
-              Dispatch top 12 →
+            <Link href={`/material/${candidates[0].id}`} className="btn-primary">
+              Screen top candidate →
             </Link>
           </>
         }

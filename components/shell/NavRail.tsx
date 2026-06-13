@@ -7,7 +7,6 @@ const ITEMS = [
   { href: "/intake", icon: "▤", label: "Intake" },
   { href: "/candidates", icon: "▦", label: "Candidates" },
   { href: "/trade-offs", icon: "◆", label: "Trade-offs" },
-  { href: "/compute", icon: "◷", label: "Compute" },
   { href: "/material", icon: "⬢", label: "Material" },
   { href: "/surface", icon: "⌬", label: "Surface" },
 ];
