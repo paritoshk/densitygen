@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir . fastapi "uvicorn[standard]"
 # The web app lives outside the package (repo-level web/).
 COPY web ./web
 
-ENV PORT=8080
-EXPOSE 8080
-# Shell form so ${PORT} is expanded (fly injects PORT).
-CMD uvicorn web.app:app --host 0.0.0.0 --port ${PORT}
+EXPOSE 7860
+# Shell form so ${PORT} is expanded. fly injects PORT=8080; HF Spaces routes to
+# 7860 (app_port). Default 7860 covers HF when PORT is unset. Works for both.
+CMD uvicorn web.app:app --host 0.0.0.0 --port ${PORT:-7860}
